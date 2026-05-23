@@ -1,0 +1,619 @@
+# Canvas Drawing App Documentation
+
+## Overview
+
+This project is a browser-based drawing application built with the HTML5 Canvas API.
+It supports:
+
+* Smooth freehand drawing
+* Zoom in / zoom out
+* Camera panning
+* Responsive canvas resizing
+* Stroke smoothing using quadratic curves
+* Redrawing saved strokes
+
+The application uses:
+
+* Native Canvas 2D API
+* JavaScript event listeners
+* A camera transformation system
+* Stroke point storage
+
+---
+
+# Architecture
+
+The app is divided into these main systems:
+
+1. Global drawing state
+2. Camera system
+3. Drawing engine
+4. Redraw engine
+5. Mouse interaction system
+6. Zoom & pan system
+7. Resize observer
+
+---
+
+# Core Variables
+
+## Canvas References
+
+```js
+const container = document.querySelector(".container")
+const Layer1 = document.querySelector("#Layer1")
+const ctx = Layer1.getContext("2d")
+```
+
+### Description
+
+| Variable    | Purpose                     |
+| ----------- | --------------------------- |
+| `container` | Main wrapper element        |
+| `Layer1`    | HTML canvas element         |
+| `ctx`       | Canvas 2D rendering context |
+
+---
+
+# GlobalState Object
+
+```js
+let GlobalState = {
+  draw : false,
+  points : [],
+  oldx : 0,
+  oldy : 0,
+  sizeLine : 8,
+  colorline : "#f81788",
+  alpha : 0.2,
+  allPoints : [],
+  cursormode : false
+}
+```
+
+## Properties
+
+| Property       | Description                            |
+| -------------- | -------------------------------------- |
+| `draw`         | Indicates if user is currently drawing |
+| `points`       | Current stroke points                  |
+| `oldx`, `oldy` | Previous mouse coordinates             |
+| `sizeLine`     | Stroke width                           |
+| `colorline`    | Stroke color                           |
+| `alpha`        | Smoothing factor                       |
+| `allPoints`    | Stores all drawn strokes               |
+| `cursormode`   | Indicates camera pan mode              |
+
+---
+
+# Camera System
+
+```js
+const Camera = {
+  x : 0,
+  y : 0,
+  zoom : 1
+}
+```
+
+## Purpose
+
+The camera object controls:
+
+* Canvas translation
+* Canvas zoom
+* Viewport movement
+
+## Properties
+
+| Property | Description            |
+| -------- | ---------------------- |
+| `x`      | Horizontal translation |
+| `y`      | Vertical translation   |
+| `zoom`   | Canvas scaling         |
+
+---
+
+# Canvas Resize System
+
+## Function
+
+```js
+function UpdateBoundries()
+```
+
+## Purpose
+
+Updates canvas dimensions when container size changes.
+
+## Features
+
+* Supports responsive layouts
+* Handles high DPI displays
+* Applies current camera transform
+
+## Important Logic
+
+```js
+const ratio = window.devicePixelRatio || 1;
+```
+
+This improves rendering quality on Retina/high-DPI screens.
+
+---
+
+# Drawing System
+
+## Function
+
+```js
+function drawlines(xRaw, yRaw)
+```
+
+## Purpose
+
+Draws smooth freehand strokes.
+
+---
+
+## Stroke Smoothing
+
+The application smooths lines using interpolation:
+
+```js
+const x = oldx + (xRaw - oldx) * alpha
+const y = oldy + (yRaw - oldy) * alpha
+```
+
+### Why?
+
+Without smoothing:
+
+* Lines appear shaky
+* Mouse input looks rough
+
+With smoothing:
+
+* Curves become softer
+* Drawing feels natural
+
+---
+
+## Quadratic Curves
+
+The app uses:
+
+```js
+ctx.quadraticCurveTo()
+```
+
+instead of straight lines.
+
+### Result
+
+* Smooth brush strokes
+* Better handwriting feel
+* Reduced jagged edges
+
+---
+
+# Stroke Storage
+
+Every point is saved:
+
+```js
+GlobalState.points.push({x,y})
+```
+
+At mouse release:
+
+```js
+GlobalState.allPoints.push(GlobalState.points)
+```
+
+This allows:
+
+* Full redraw
+* Zoom rendering
+* Camera movement without losing drawings
+
+---
+
+# Redraw Engine
+
+## Function
+
+```js
+function redraw()
+```
+
+## Purpose
+
+Re-renders all strokes from saved points.
+
+---
+
+## Workflow
+
+### 1. Reset transform
+
+```js
+ctx.setTransform(1,0,0,1,0,0)
+```
+
+### 2. Clear canvas
+
+```js
+ctx.clearRect(0,0,Layer1.width,Layer1.height)
+```
+
+### 3. Restore camera transform
+
+### 4. Draw every saved stroke
+
+```js
+for(let item of GlobalState.allPoints)
+```
+
+---
+
+# Stroke Rendering
+
+## Function
+
+```js
+function RedrawEachLine(item)
+```
+
+## Purpose
+
+Reconstructs saved strokes.
+
+Each segment uses:
+
+```js
+ctx.quadraticCurveTo()
+```
+
+for smooth rendering.
+
+---
+
+# Mouse Interaction System
+
+---
+
+## Left Mouse Button → Draw
+
+### Event
+
+```js
+mousedown
+```
+
+When left click is detected:
+
+```js
+if(e.button == 0)
+```
+
+The app:
+
+1. Converts screen coordinates to world coordinates
+2. Starts a new stroke
+3. Enables drawing mode
+
+---
+
+## Mouse Move → Continue Drawing
+
+### Event
+
+```js
+mousemove
+```
+
+While drawing:
+
+```js
+if(GlobalState.draw)
+```
+
+The application continuously draws smooth curves.
+
+---
+
+## Mouse Up → Finish Stroke
+
+### Event
+
+```js
+mouseup
+```
+
+Actions:
+
+```js
+GlobalState.draw = false
+GlobalState.allPoints.push(GlobalState.points)
+```
+
+This finalizes the current stroke.
+
+---
+
+# Coordinate Conversion
+
+## Problem
+
+Canvas coordinates change when zooming/panning.
+
+## Solution
+
+Convert screen coordinates into world coordinates:
+
+```js
+((mouseX - Camera.x) / Camera.zoom)
+```
+
+This ensures drawing remains accurate under transformations.
+
+---
+
+# Camera Pan System
+
+## Right Mouse Button
+
+If user presses right-click:
+
+```js
+GlobalState.cursormode = true
+```
+
+The app enters camera drag mode.
+
+---
+
+## Panning Logic
+
+Mouse movement delta:
+
+```js
+newDx = x - SaveOldest.x
+newDy = y - SaveOldest.y
+```
+
+Camera position updates:
+
+```js
+Camera.x += newDx
+Camera.y += newDy
+```
+
+Then:
+
+```js
+redraw()
+```
+
+is called to refresh the scene.
+
+---
+
+# Zoom System
+
+## Zoom In
+
+```js
+Camera.zoom += 0.1
+```
+
+## Zoom Out
+
+```js
+Camera.zoom -= 0.1
+```
+
+After zooming:
+
+1. Canvas clears
+2. Transform reapplies
+3. All strokes redraw
+
+---
+
+# Canvas Transform Matrix
+
+The app uses:
+
+```js
+ctx.setTransform(a,b,c,d,e,f)
+```
+
+## Parameters
+
+| Parameter | Meaning     |
+| --------- | ----------- |
+| `a`       | Scale X     |
+| `b`       | Skew Y      |
+| `c`       | Skew X      |
+| `d`       | Scale Y     |
+| `e`       | Translate X |
+| `f`       | Translate Y |
+
+Current usage:
+
+```js
+ctx.setTransform(
+  Camera.zoom,
+  0,
+  0,
+  Camera.zoom,
+  Camera.x,
+  Camera.y
+)
+```
+
+---
+
+# Resize Observer
+
+## Purpose
+
+Automatically updates canvas when container size changes.
+
+## Event
+
+```js
+const observer = new ResizeObserver(...)
+```
+
+When triggered:
+
+```js
+UpdateBoundries()
+redraw()
+```
+
+---
+
+# Context Menu Prevention
+
+## Purpose
+
+Prevents browser right-click menu during camera pan.
+
+```js
+container.addEventListener("contextmenu",(e)=>{
+  e.preventDefault()
+})
+```
+
+---
+
+# Rendering Flow
+
+## Drawing Flow
+
+```text
+mousedown
+   ↓
+mousemove
+   ↓
+drawlines()
+   ↓
+save points
+   ↓
+mouseup
+   ↓
+store stroke
+```
+
+---
+
+## Camera Flow
+
+```text
+right click
+   ↓
+mousemove
+   ↓
+update Camera.x/y
+   ↓
+redraw()
+```
+
+---
+
+# Features Summary
+
+| Feature            | Supported |
+| ------------------ | --------- |
+| Smooth drawing     | ✅         |
+| Zooming            | ✅         |
+| Camera panning     | ✅         |
+| Responsive canvas  | ✅         |
+| Stroke persistence | ✅         |
+| High DPI support   | ✅         |
+| Freehand curves    | ✅         |
+
+---
+
+# Possible Improvements
+
+## Undo / Redo
+
+Store action history.
+
+---
+
+## Touch Support
+
+Add:
+
+```js
+touchstart
+touchmove
+touchend
+```
+
+---
+
+## Infinite Canvas
+
+Implement world chunk rendering.
+
+---
+
+## Stroke Colors
+
+Allow per-stroke styling.
+
+---
+
+## Pressure Sensitivity
+
+Use Pointer Events API.
+
+---
+
+## Export Drawing
+
+```js
+canvas.toDataURL()
+```
+
+---
+
+# Performance Notes
+
+Current redraw system redraws all strokes every frame.
+
+This works well for small/medium drawings.
+
+For large projects consider:
+
+* Spatial partitioning
+* Offscreen canvas
+* Layer caching
+* WebGL rendering
+
+---
+
+# Conclusion
+
+This project demonstrates a complete custom canvas engine using:
+
+* Coordinate transformations
+* Camera systems
+* Curve interpolation
+* Responsive rendering
+* Stroke reconstruction
+
+It is a strong foundation for building:
+
+* Whiteboard apps
+* Drawing tools
+* Diagram editors
+* Infinite canvas systems
+* Vector sketch applications
